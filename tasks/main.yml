@@ -1,0 +1,68 @@
+---
+- name: install ncurses-devel and cmake
+  yum: name={{ item }} state=installed
+  with_items:
+  - ncurses-devel
+  - libselinux-python
+  - cmake
+
+- name: unchive the source codes and put them into target server
+  unarchive: src={{ item }} dest=/tmp/ copy=yes
+  with_items:
+  - mysql-5.5.32.tar.gz
+
+#- name: put the cmake & mysql tar package into /tmp folder
+#  copy: src={{ item }} dest=/tmp/
+#  with_items:
+#  - cmake-2.8.8.tar.gz
+#  - mysql-5.5.32.tar.gz
+#
+#
+#- name: untar the packages
+#  shell: chdir=/tmp/ /usr/bin/tar -xf cmake-2.8.8.tar.gz
+
+- name: make install mysql-server
+  shell: chdir=/tmp/mysql-5.5.32 /usr/bin/cmake . -DCMAKE_INSTALL_PREFIX=/application/mysql-5.5.32 -DMYSQL_DATADIR=/application/mysql-5.5.32/data -DMYSQL_UNIX_ADDR=/application/mysql-5.5.32/tmp/mysql.sock -DDEFAULT_CHARSET=utf8 -DDEFAULT_COLLATION=utf8_general_ci -DEXTRA_CHARSETS=gbk,gb2312,utf8,ascii -DENABLED_LOCAL_INFILE=ON -DWITH_INNOBASE_STORAGE_ENGINE=1 -DWITH_FEDERATED_STORAGE_ENGINE=1 -DWITH_BLACKHOLE_STORAGE_ENGINE=1 -DWITHOUT_EXAMPLE_STORAGE_ENGINE=1 -DWITHOUT_PARTITION_STORAGE_ENGINE=1 -DWITH_FAST_MUTEXES=1 -DWITH_ZLIB=bundled -DENABLED_LOCAL_INFILE=1 -DWITH_READLINE=1 -DWITH_EMBEDDED_SERVER=1 -DWITH_DEBUG=0 && make && make install
+  run_once: True
+
+- name: create mysql group
+  group: name=mysql  state=present
+ 
+- name: create mysql user
+  user: name=mysql group=mysql shell=/sbin/nologin
+
+- name: prepare the data folder
+  file: path=/data/{{ port }}/data/ state=directory owner=mysql group=mysql mode=755
+
+- name: change the permission of folder
+  file: path=/data/ mode=0755
+
+#- name: copy the configuration file
+#  template: src=my.cnf.j2 dest=/data/{{ port }}/my.cnf
+#  template: src={{ item }} dest=/data/{{ port }}/ owner=mysql group=mysql
+#  with_items:
+#  - my.cnf.j2
+#  - mysql.j2
+
+- name: transfer mysql script
+  template: src=mysql.j2 dest=/data/{{ port }}/mysql owner=root group=root mode=700
+
+- name: transfer mysql configuration file
+  template: src=my.cnf.j2 dest=/data/{{ port }}/my.cnf owner=mysql group=mysql mode=644
+
+- name: create soft link for mysql
+  file: src=/application/mysql-5.5.32/ dest=/application/mysql state=link
+
+- name: initialize the mysql database
+  shell: chdir=/application/mysql/scripts/ /bin/sh mysql_install_db --basedir=/application/mysql --datadir=/data/{{ port }}/data --user=mysql
+
+- name: start the database
+  shell: /data/{{ port }}/mysql start
+
+- name: set password of root for database
+  shell: sleep 5;export PATH=/application/mysql/bin/:$PATH;mysqladmin -uroot -S /data/{{ port }}/mysql.sock password {{ mysqlpassword }}
+  ignore_errors: True
+  no_log: True
+
+- name: shutdown the database
+  shell: sleep 5;/data/{{ port }}/mysql stop
