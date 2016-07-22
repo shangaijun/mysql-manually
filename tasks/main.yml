@@ -2,9 +2,12 @@
 - name: install ncurses-devel and cmake
   yum: name={{ item }} state=installed
   with_items:
+  - gcc-c++
+  - gcc
+  - cmake
   - ncurses-devel
   - libselinux-python
-  - cmake
+  ignore_errors: True
 
 - name: unchive the source codes and put them into target server
   unarchive: src={{ item }} dest=/tmp/ copy=yes
